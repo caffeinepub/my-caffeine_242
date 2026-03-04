@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("/assets/fonts/Fraunces[SOFT,WONK,opsz,wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Outfit";
+  src: url("/assets/fonts/Outfit[wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Dark cinematic theme — deep ink blacks, warm gold accents */
+    --background: 0.1 0.01 280;
+    --foreground: 0.95 0.01 85;
+    --card: 0.13 0.015 280;
+    --card-foreground: 0.92 0.01 85;
+    --popover: 0.15 0.015 280;
+    --popover-foreground: 0.92 0.01 85;
+
+    /* Gold/amber accent */
+    --primary: 0.72 0.18 55;
+    --primary-foreground: 0.1 0.01 280;
+
+    --secondary: 0.18 0.02 280;
+    --secondary-foreground: 0.85 0.01 85;
+
+    --muted: 0.16 0.015 280;
+    --muted-foreground: 0.55 0.02 280;
+
+    --accent: 0.72 0.18 55;
+    --accent-foreground: 0.1 0.01 280;
+
+    --destructive: 0.62 0.22 22;
+    --destructive-foreground: 0.98 0 0;
+
+    --border: 0.22 0.02 280;
+    --input: 0.2 0.02 280;
+    --ring: 0.72 0.18 55;
+
+    --chart-1: 0.72 0.18 55;
+    --chart-2: 0.62 0.22 22;
+    --chart-3: 0.55 0.16 200;
+    --chart-4: 0.68 0.14 150;
+    --chart-5: 0.75 0.12 300;
+
+    --sidebar: 0.12 0.012 280;
+    --sidebar-foreground: 0.92 0.01 85;
+    --sidebar-primary: 0.72 0.18 55;
+    --sidebar-primary-foreground: 0.1 0.01 280;
+    --sidebar-accent: 0.18 0.02 280;
+    --sidebar-accent-foreground: 0.85 0.01 85;
+    --sidebar-border: 0.22 0.02 280;
+    --sidebar-ring: 0.72 0.18 55;
+
+    /* Custom drama variables */
+    --gold: 0.72 0.18 55;
+    --gold-bright: 0.82 0.2 60;
+    --gold-dim: 0.5 0.12 55;
+    --ink: 0.08 0.008 280;
+    --ink-deep: 0.06 0.006 280;
+    --surface-1: 0.13 0.015 280;
+    --surface-2: 0.18 0.02 280;
+    --surface-3: 0.22 0.025 280;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Outfit", sans-serif;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Fraunces", serif;
+  }
+  .font-ui {
+    font-family: "Bricolage Grotesque", sans-serif;
+  }
+  .gold-text {
+    color: oklch(var(--gold));
+  }
+  .gold-glow {
+    text-shadow: 0 0 30px oklch(var(--gold) / 0.5);
+  }
+  .card-hover {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  .card-hover:hover {
+    transform: scale(1.04) translateY(-4px);
+    box-shadow: 0 20px 60px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(var(--gold) / 0.3);
+  }
+  .cinema-bg {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(var(--gold) / 0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, oklch(0.4 0.08 280 / 0.12) 0%, transparent 60%),
+      oklch(var(--ink));
+  }
+  .film-grain::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+}
