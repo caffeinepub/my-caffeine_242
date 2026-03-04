@@ -1,5 +1,6 @@
+import type { Movie } from "@/backend";
 import { Button } from "@/components/ui/button";
-import { type Movie, getMovies } from "@/lib/storage";
+import { useActor } from "@/hooks/useActor";
 import { useParams, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, Film } from "lucide-react";
 import { motion } from "motion/react";
@@ -16,19 +17,27 @@ function getDropboxEmbedUrl(url: string): string {
 export default function MoviePage() {
   const router = useRouter();
   const { id } = useParams({ from: "/movie/$id" });
+  const { actor } = useActor();
   const [movie, setMovie] = useState<Movie | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [iframeError, setIframeError] = useState(false);
 
   useEffect(() => {
-    const movies = getMovies();
-    const found = movies.find((m) => m.id === Number(id));
-    if (found) {
-      setMovie(found);
-    } else {
-      setNotFound(true);
-    }
-  }, [id]);
+    if (!actor) return;
+    const fetchMovie = async () => {
+      try {
+        const found = await actor.getMovie(BigInt(id));
+        if (found) {
+          setMovie(found);
+        } else {
+          setNotFound(true);
+        }
+      } catch {
+        setNotFound(true);
+      }
+    };
+    fetchMovie();
+  }, [actor, id]);
 
   if (notFound) {
     return (

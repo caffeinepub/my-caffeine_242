@@ -1,3 +1,4 @@
+import type { ExpiryType, Movie, PinCode } from "@/backend";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,30 +26,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useActor } from "@/hooks/useActor";
 import {
-  type ExpiryType,
-  type Movie,
-  type PinCode,
-  addMovie,
   clearAdminSession,
-  createPin,
-  deleteMovie,
   expiryLabel,
   formatExpiry,
-  getAdminCreds,
-  getMovies,
-  getPins,
-  revokePin,
-  saveAdminCreds,
-  updateMovie,
+  getAdminSession,
+  isAdminAuthenticated,
+  setAdminSession,
 } from "@/lib/storage";
 import { useRouter } from "@tanstack/react-router";
 import {
+  AlertCircle,
   Ban,
   Eye,
   EyeOff,
   Film,
   Key,
+  LogIn,
   LogOut,
   Pencil,
   Plus,
@@ -77,7 +72,10 @@ function PinStatusBadge({ pin }: { pin: PinCode }) {
       </Badge>
     );
   }
-  if (Date.now() > pin.expiresAt) {
+  if (
+    pin.expiresAt !== -1n &&
+    Date.now() > Number(pin.expiresAt / 1_000_000n)
+  ) {
     return (
       <Badge
         variant="outline"
@@ -109,8 +107,178 @@ function truncateUrl(url: string, max = 40): string {
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
+// ─── Admin Login Form (shown when not authenticated) ───────────────────────────
+
+function AdminLoginForm({ onSuccess }: { onSuccess: () => void }) {
+  const { actor, isFetching: actorLoading } = useActor();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!actor) {
+      setError(
+        "Сервертэй холбогдож байна. Хэдхэн секунд хүлээгээд дахин оролдоно уу.",
+      );
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const result = await actor.adminLogin(username, password);
+      if (result.ok) {
+        setAdminSession(result.token);
+        onSuccess();
+      } else {
+        setError("Нэвтрэх нэр эсвэл нууц үг буруу байна");
+      }
+    } catch (err) {
+      console.error("Admin login error:", err);
+      setError("Сервертэй холбогдоход алдаа гарлаа. Дахин оролдоно уу.");
+    }
+    setLoading(false);
+  };
+
+  const inputStyle = {
+    background: "oklch(0.1 0.01 280)",
+    border: "1px solid oklch(0.22 0.02 280)",
+    color: "oklch(0.92 0.01 85)",
+  };
+
+  return (
+    <div
+      className="min-h-screen flex flex-col items-center justify-center"
+      style={{ background: "oklch(0.08 0.008 280)" }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-sm px-6"
+      >
+        <div className="flex flex-col items-center mb-8">
+          <div
+            className="w-14 h-14 rounded-xl flex items-center justify-center mb-4"
+            style={{
+              background: "oklch(0.72 0.18 55 / 0.15)",
+              border: "1px solid oklch(0.72 0.18 55 / 0.3)",
+            }}
+          >
+            <ShieldCheck
+              className="w-7 h-7"
+              style={{ color: "oklch(0.72 0.18 55)" }}
+            />
+          </div>
+          <h1 className="font-ui text-xl font-bold text-foreground">
+            Admin Panel
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1 font-body">
+            Хятад Драма
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl p-6"
+          style={{
+            background: "oklch(0.13 0.015 280 / 0.9)",
+            border: "1px solid oklch(0.22 0.02 280)",
+          }}
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label className="font-body text-sm text-foreground">
+                Нэвтрэх нэр
+              </Label>
+              <Input
+                data-ocid="admin_login.input"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setError("");
+                }}
+                placeholder="username"
+                autoComplete="username"
+                className="font-body"
+                style={inputStyle}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-body text-sm text-foreground">
+                Нууц үг
+              </Label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError("");
+                }}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                className="font-body"
+                style={inputStyle}
+              />
+            </div>
+
+            {actorLoading && !error && (
+              <div
+                className="flex items-center gap-2 text-sm"
+                style={{ color: "oklch(0.65 0.06 280)" }}
+              >
+                <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin flex-shrink-0" />
+                Сервертэй холбогдож байна...
+              </div>
+            )}
+
+            {error && (
+              <div
+                data-ocid="admin_login.error_state"
+                className="flex items-center gap-2 text-sm"
+                style={{ color: "oklch(0.75 0.18 22)" }}
+              >
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <Button
+              data-ocid="admin_login.submit_button"
+              type="submit"
+              disabled={
+                loading || actorLoading || !username || !password || !actor
+              }
+              className="w-full gap-2 font-ui"
+              style={{
+                background: "oklch(0.72 0.18 55)",
+                color: "oklch(0.1 0.01 280)",
+              }}
+            >
+              {loading || actorLoading ? (
+                <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  Нэвтрэх
+                </>
+              )}
+            </Button>
+          </form>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Main Admin Page ──────────────────────────────────────────────────────────
+
 export default function AdminPage() {
   const router = useRouter();
+  const { actor } = useActor();
+  const [authenticated, setAuthenticated] = useState(isAdminAuthenticated());
+  const token = getAdminSession();
 
   // Movies state
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -122,12 +290,14 @@ export default function AdminPage() {
     videoUrl: "",
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deletingMovieId, setDeletingMovieId] = useState<number | null>(null);
+  const [deletingMovieId, setDeletingMovieId] = useState<bigint | null>(null);
 
   // Pins state
   const [pins, setPins] = useState<PinCode[]>([]);
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
-  const [pinExpiryType, setPinExpiryType] = useState<ExpiryType>("thirtyDays");
+  const [pinExpiryType, setPinExpiryType] = useState<ExpiryType>(
+    "thirtyDays" as ExpiryType,
+  );
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [revokingCode, setRevokingCode] = useState<string | null>(null);
 
@@ -139,16 +309,54 @@ export default function AdminPage() {
   const [settingsSaving, setSettingsSaving] = useState(false);
 
   useEffect(() => {
-    setMovies(getMovies());
-    setPins(getPins());
-    const creds = getAdminCreds();
-    setSettingsUsername(creds.username);
-  }, []);
+    if (!actor) return;
+    const loadData = async () => {
+      try {
+        const [moviesResult, pinsResult] = await Promise.all([
+          actor.getMovies(0n, 100n),
+          actor.listPinCodes(token),
+        ]);
+        setMovies(moviesResult.movies);
+        if (pinsResult.ok) {
+          setPins(pinsResult.pins);
+        }
+      } catch {
+        toast.error("Өгөгдөл ачааллахад алдаа гарлаа");
+      }
+    };
+    loadData();
+  }, [actor, token]);
 
-  const refreshMovies = () => setMovies(getMovies());
-  const refreshPins = () => setPins(getPins());
+  const refreshMovies = async () => {
+    if (!actor) return;
+    try {
+      const result = await actor.getMovies(0n, 100n);
+      setMovies(result.movies);
+    } catch {
+      toast.error("Кино жагсаалт шинэчлэхэд алдаа гарлаа");
+    }
+  };
 
-  const handleLogout = () => {
+  const refreshPins = async () => {
+    if (!actor) return;
+    try {
+      const result = await actor.listPinCodes(token);
+      if (result.ok) {
+        setPins(result.pins);
+      }
+    } catch {
+      toast.error("PIN жагсаалт шинэчлэхэд алдаа гарлаа");
+    }
+  };
+
+  const handleLogout = async () => {
+    if (actor) {
+      try {
+        await actor.adminLogout(token);
+      } catch {
+        // ignore errors on logout
+      }
+    }
     clearAdminSession();
     router.navigate({ to: "/" });
   };
@@ -171,43 +379,54 @@ export default function AdminPage() {
     setMovieDialogOpen(true);
   };
 
-  const handleMovieSubmit = (e: React.FormEvent) => {
+  const handleMovieSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!movieForm.title.trim() || !movieForm.videoUrl.trim()) {
       toast.error("Гарчиг болон видео URL заавал шаардлагатай");
       return;
     }
-    if (editingMovie) {
-      updateMovie(editingMovie.id, {
-        title: movieForm.title.trim(),
-        posterUrl: movieForm.posterUrl.trim(),
-        videoUrl: movieForm.videoUrl.trim(),
-      });
-      toast.success("Кино амжилттай шинэчлэгдлээ");
-    } else {
-      addMovie({
-        title: movieForm.title.trim(),
-        posterUrl:
+    if (!actor) return;
+    try {
+      if (editingMovie) {
+        await actor.updateMovie(
+          token,
+          editingMovie.id,
+          movieForm.title.trim(),
+          movieForm.posterUrl.trim(),
+          movieForm.videoUrl.trim(),
+        );
+        toast.success("Кино амжилттай шинэчлэгдлээ");
+      } else {
+        await actor.addMovie(
+          token,
+          movieForm.title.trim(),
           movieForm.posterUrl.trim() ||
-          `https://picsum.photos/seed/${Date.now()}/300/420`,
-        videoUrl: movieForm.videoUrl.trim(),
-      });
-      toast.success("Кино амжилттай нэмэгдлээ");
+            `https://picsum.photos/seed/${Date.now()}/300/420`,
+          movieForm.videoUrl.trim(),
+        );
+        toast.success("Кино амжилттай нэмэгдлээ");
+      }
+      await refreshMovies();
+      setMovieDialogOpen(false);
+    } catch {
+      toast.error("Кино хадгалахад алдаа гарлаа");
     }
-    refreshMovies();
-    setMovieDialogOpen(false);
   };
 
-  const confirmDelete = (id: number) => {
+  const confirmDelete = (id: bigint) => {
     setDeletingMovieId(id);
     setDeleteDialogOpen(true);
   };
 
-  const handleDelete = () => {
-    if (deletingMovieId !== null) {
-      deleteMovie(deletingMovieId);
-      refreshMovies();
-      toast.success("Кино устгагдлаа");
+  const handleDelete = async () => {
+    if (deletingMovieId !== null && actor) {
+      try {
+        await actor.deleteMovie(token, deletingMovieId);
+        await refreshMovies();
+        toast.success("Кино устгагдлаа");
+      } catch {
+        toast.error("Кино устгахад алдаа гарлаа");
+      }
     }
     setDeleteDialogOpen(false);
     setDeletingMovieId(null);
@@ -215,12 +434,21 @@ export default function AdminPage() {
 
   // ── PIN CRUD ────────────────────────────────────────────────────────────────
 
-  const handleCreatePin = (e: React.FormEvent) => {
+  const handleCreatePin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const pin = createPin(pinExpiryType);
-    refreshPins();
-    setPinDialogOpen(false);
-    toast.success(`Шинэ код үүслээ: ${pin.code}`);
+    if (!actor) return;
+    try {
+      const result = await actor.createPinCode(token, pinExpiryType);
+      if (result.ok) {
+        await refreshPins();
+        setPinDialogOpen(false);
+        toast.success(`Шинэ код үүслээ: ${result.code}`);
+      } else {
+        toast.error("Код үүсгэхэд алдаа гарлаа");
+      }
+    } catch {
+      toast.error("Код үүсгэхэд алдаа гарлаа");
+    }
   };
 
   const confirmRevoke = (code: string) => {
@@ -228,11 +456,15 @@ export default function AdminPage() {
     setRevokeDialogOpen(true);
   };
 
-  const handleRevoke = () => {
-    if (revokingCode) {
-      revokePin(revokingCode);
-      refreshPins();
-      toast.success("Код цуцлагдлаа");
+  const handleRevoke = async () => {
+    if (revokingCode && actor) {
+      try {
+        await actor.revokePinCode(token, revokingCode);
+        await refreshPins();
+        toast.success("Код цуцлагдлаа");
+      } catch {
+        toast.error("Код цуцлахад алдаа гарлаа");
+      }
     }
     setRevokeDialogOpen(false);
     setRevokingCode(null);
@@ -250,17 +482,29 @@ export default function AdminPage() {
       toast.error("Нууц үг тохирохгүй байна");
       return;
     }
+    if (!settingsPassword) {
+      toast.error("Шинэ нууц үг оруулна уу");
+      return;
+    }
+    if (!actor) return;
     setSettingsSaving(true);
-    await new Promise((r) => setTimeout(r, 300));
-    const current = getAdminCreds();
-    saveAdminCreds({
-      username: settingsUsername.trim(),
-      password: settingsPassword.trim() || current.password,
-    });
-    setSettingsPassword("");
-    setSettingsPasswordConfirm("");
+    try {
+      const ok = await actor.updateAdminCredentials(
+        token,
+        settingsUsername.trim(),
+        settingsPassword.trim(),
+      );
+      if (ok) {
+        setSettingsPassword("");
+        setSettingsPasswordConfirm("");
+        toast.success("Тохиргоо хадгалагдлаа");
+      } else {
+        toast.error("Тохиргоо хадгалахад алдаа гарлаа");
+      }
+    } catch {
+      toast.error("Тохиргоо хадгалахад алдаа гарлаа");
+    }
     setSettingsSaving(false);
-    toast.success("Тохиргоо хадгалагдлаа");
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -270,6 +514,10 @@ export default function AdminPage() {
     border: "1px solid oklch(0.22 0.02 280)",
     color: "oklch(0.92 0.01 85)",
   };
+
+  if (!authenticated) {
+    return <AdminLoginForm onSuccess={() => setAuthenticated(true)} />;
+  }
 
   return (
     <div
@@ -411,7 +659,7 @@ export default function AdminPage() {
                     ) : (
                       movies.map((movie, index) => (
                         <TableRow
-                          key={movie.id}
+                          key={String(movie.id)}
                           style={{ borderColor: "oklch(0.18 0.02 280)" }}
                         >
                           <TableCell className="font-body text-sm text-foreground font-medium">
@@ -554,19 +802,22 @@ export default function AdminPage() {
                             <PinStatusBadge pin={pin} />
                           </TableCell>
                           <TableCell>
-                            {pin.isActive && Date.now() <= pin.expiresAt && (
-                              <Button
-                                data-ocid={`admin.pin.revoke_button.${index + 1}`}
-                                variant="ghost"
-                                size="sm"
-                                className="gap-1.5 text-xs font-ui h-7"
-                                onClick={() => confirmRevoke(pin.code)}
-                                style={{ color: "oklch(0.62 0.22 22)" }}
-                              >
-                                <Ban className="w-3 h-3" />
-                                Revoke
-                              </Button>
-                            )}
+                            {pin.isActive &&
+                              (pin.expiresAt === -1n ||
+                                Date.now() <=
+                                  Number(pin.expiresAt / 1_000_000n)) && (
+                                <Button
+                                  data-ocid={`admin.pin.revoke_button.${index + 1}`}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="gap-1.5 text-xs font-ui h-7"
+                                  onClick={() => confirmRevoke(pin.code)}
+                                  style={{ color: "oklch(0.62 0.22 22)" }}
+                                >
+                                  <Ban className="w-3 h-3" />
+                                  Revoke
+                                </Button>
+                              )}
                           </TableCell>
                         </TableRow>
                       ))
@@ -620,7 +871,7 @@ export default function AdminPage() {
                     <Label className="font-ui text-sm text-foreground">
                       New Password{" "}
                       <span className="text-muted-foreground font-normal">
-                        (leave blank to keep current)
+                        (required)
                       </span>
                     </Label>
                     <div className="relative">
@@ -914,13 +1165,16 @@ export default function AdminPage() {
                   }}
                 >
                   <SelectItem value="twentyMinutes" className="font-body">
-                    20 минут (20 Minutes)
+                    20 минут
                   </SelectItem>
                   <SelectItem value="thirtyDays" className="font-body">
-                    30 хоног (30 Days)
+                    30 хоног
                   </SelectItem>
                   <SelectItem value="ninetyDays" className="font-body">
-                    90 хоног (90 Days)
+                    90 хоног
+                  </SelectItem>
+                  <SelectItem value="unlimited" className="font-body">
+                    Хугацаагүй
                   </SelectItem>
                 </SelectContent>
               </Select>

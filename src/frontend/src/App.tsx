@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
+import { useActor } from "@/hooks/useActor";
 import {
-  initStorage,
-  isAdminAuthenticated,
+  clearDeviceAuth,
+  getDeviceToken,
   isDeviceAuthenticated,
 } from "@/lib/storage";
 import {
@@ -11,13 +12,48 @@ import {
   createRoute,
   createRouter,
   redirect,
+  useRouter,
 } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import AccessPage from "@/pages/AccessPage";
 import AdminPage from "@/pages/AdminPage";
 import HomePage from "@/pages/HomePage";
 import MoviePage from "@/pages/MoviePage";
+
+// ─── Token Validator ──────────────────────────────────────────────────────────
+// Validates the stored device token against the backend once the actor is ready.
+// If the token is invalid (e.g. backend was upgraded), clears auth and redirects.
+
+function TokenValidator() {
+  const { actor } = useActor();
+  const router = useRouter();
+  const validated = useRef(false);
+
+  useEffect(() => {
+    if (!actor || validated.current) return;
+
+    const storedToken = getDeviceToken();
+    if (!storedToken) return; // no token, nothing to validate
+
+    validated.current = true;
+
+    actor
+      .checkDeviceToken(storedToken)
+      .then((isValid) => {
+        if (!isValid) {
+          clearDeviceAuth();
+          router.navigate({ to: "/access" });
+        }
+      })
+      .catch(() => {
+        // Network error — don't clear auth, allow retry
+        validated.current = false;
+      });
+  }, [actor, router]);
+
+  return null;
+}
 
 // ─── Root Route ───────────────────────────────────────────────────────────────
 
@@ -25,6 +61,7 @@ const rootRoute = createRootRoute({
   component: () => (
     <>
       <div className="film-grain" />
+      <TokenValidator />
       <Outlet />
       <Toaster
         theme="dark"
@@ -86,11 +123,7 @@ const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin",
   component: AdminPage,
-  beforeLoad: () => {
-    if (!isAdminAuthenticated()) {
-      throw redirect({ to: "/" });
-    }
-  },
+  // No redirect: AdminPage handles login state itself
 });
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -113,9 +146,5 @@ declare module "@tanstack/react-router" {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  useEffect(() => {
-    initStorage();
-  }, []);
-
   return <RouterProvider router={router} />;
 }

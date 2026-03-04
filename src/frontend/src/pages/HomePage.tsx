@@ -1,3 +1,4 @@
+import type { Movie } from "@/backend";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,12 +8,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  type Movie,
-  getMovies,
-  setAdminSession,
-  validateAdmin,
-} from "@/lib/storage";
+import { useActor } from "@/hooks/useActor";
+import { setAdminSession } from "@/lib/storage";
 import { useRouter } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -43,8 +40,11 @@ const cardVariants: Variants = {
 
 export default function HomePage() {
   const router = useRouter();
+  const { actor } = useActor();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [isLoadingMovies, setIsLoadingMovies] = useState(true);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [adminUsername, setAdminUsername] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
@@ -52,11 +52,27 @@ export default function HomePage() {
   const [adminLoading, setAdminLoading] = useState(false);
 
   useEffect(() => {
-    setMovies(getMovies());
-  }, []);
+    if (!actor) return;
+    const fetchMovies = async () => {
+      setIsLoadingMovies(true);
+      try {
+        const result = await actor.getMovies(
+          BigInt(page - 1),
+          BigInt(PAGE_SIZE),
+        );
+        setMovies(result.movies);
+        setTotal(Number(result.total));
+      } catch {
+        setMovies([]);
+        setTotal(0);
+      } finally {
+        setIsLoadingMovies(false);
+      }
+    };
+    fetchMovies();
+  }, [actor, page]);
 
-  const totalPages = Math.max(1, Math.ceil(movies.length / PAGE_SIZE));
-  const pageMovies = movies.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const handleMovieClick = (movie: Movie) => {
     router.navigate({ to: "/movie/$id", params: { id: String(movie.id) } });
@@ -64,18 +80,23 @@ export default function HomePage() {
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!actor) return;
     setAdminLoading(true);
     setAdminError("");
-    await new Promise((r) => setTimeout(r, 300));
 
-    if (validateAdmin(adminUsername, adminPassword)) {
-      setAdminSession();
-      setAdminModalOpen(false);
-      setAdminUsername("");
-      setAdminPassword("");
-      router.navigate({ to: "/admin" });
-    } else {
-      setAdminError("Нэвтрэх нэр эсвэл нууц үг буруу байна");
+    try {
+      const result = await actor.adminLogin(adminUsername, adminPassword);
+      if (result.ok) {
+        setAdminSession(result.token);
+        setAdminModalOpen(false);
+        setAdminUsername("");
+        setAdminPassword("");
+        router.navigate({ to: "/admin" });
+      } else {
+        setAdminError("Нэвтрэх нэр эсвэл нууц үг буруу байна");
+      }
+    } catch {
+      setAdminError("Сервертэй холбогдоход алдаа гарлаа. Дахин оролдоно уу.");
     }
     setAdminLoading(false);
   };
@@ -120,7 +141,7 @@ export default function HomePage() {
               Бүх Цуврал
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {movies.length} цуврал нийт
+              {total} цуврал нийт
             </p>
           </div>
           {totalPages > 1 && (
@@ -130,8 +151,45 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Movie grid */}
-        {pageMovies.length === 0 ? (
+        {/* Loading state */}
+        {isLoadingMovies ? (
+          <div
+            data-ocid="movies.loading_state"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+          >
+            {Array.from({ length: 20 }, (_, i) => `skeleton-${i}`).map(
+              (key) => (
+                <div
+                  key={key}
+                  className="rounded-xl overflow-hidden animate-pulse"
+                  style={{ background: "oklch(0.13 0.015 280)" }}
+                >
+                  <div
+                    className="aspect-[5/7]"
+                    style={{ background: "oklch(0.16 0.015 280)" }}
+                  />
+                  <div className="p-3 space-y-2">
+                    <div
+                      className="h-3 rounded"
+                      style={{
+                        background: "oklch(0.18 0.02 280)",
+                        width: "80%",
+                      }}
+                    />
+                    <div
+                      className="h-3 rounded"
+                      style={{
+                        background: "oklch(0.18 0.02 280)",
+                        width: "60%",
+                      }}
+                    />
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        ) : movies.length === 0 ? (
+          /* Empty state */
           <div
             data-ocid="movies.empty_state"
             className="flex flex-col items-center justify-center py-24 text-muted-foreground"
@@ -141,6 +199,7 @@ export default function HomePage() {
             <p className="text-sm mt-1">Админ кино нэмэх хүртэл хүлээнэ үү</p>
           </div>
         ) : (
+          /* Movie grid */
           <motion.div
             key={`page-${page}`}
             variants={containerVariants}
@@ -148,9 +207,9 @@ export default function HomePage() {
             animate="show"
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
           >
-            {pageMovies.map((movie, index) => (
+            {movies.map((movie, index) => (
               <motion.div
-                key={movie.id}
+                key={String(movie.id)}
                 data-ocid={`movies.item.${index + 1}`}
                 variants={cardVariants}
                 onClick={() => handleMovieClick(movie)}
@@ -227,7 +286,7 @@ export default function HomePage() {
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {totalPages > 1 && !isLoadingMovies && (
           <div className="mt-10 flex items-center justify-center gap-4">
             <Button
               data-ocid="pagination.pagination_prev"
@@ -373,6 +432,7 @@ export default function HomePage() {
 
                 {adminError && (
                   <div
+                    data-ocid="admin_login.error_state"
                     className="flex items-center gap-2 text-sm"
                     style={{ color: "oklch(0.75 0.18 22)" }}
                   >
@@ -402,7 +462,9 @@ export default function HomePage() {
                   <Button
                     data-ocid="admin_login.submit_button"
                     type="submit"
-                    disabled={adminLoading || !adminUsername || !adminPassword}
+                    disabled={
+                      adminLoading || !adminUsername || !adminPassword || !actor
+                    }
                     className="flex-1 font-ui"
                     style={{
                       background: "oklch(0.72 0.18 55)",
